@@ -94,7 +94,13 @@ bbduk.sh in=./QC/step_4/"$F"_R1.s4.out.fastq in2=./QC/step_4/"$F"_R2.s4.out.fast
 	ordered=t \
 	ow=t;
 
+done #close loop here, let wrap run
+
 # Step 6: Host removal
+
+#gather all file names and input to bbwrap
+COUNT=$(ls ./QC/step_5/*R1* | wc -l)
+
 bbmap.sh in=./QC/step_5/"$F"_R1.s5.out.fastq in2=./QC/step_5/"$F"_R2.s5.out.fastq \
 	outu=./QC/step_6/"$F"_unmapped.s6.out.fastq outm=./QC/step_6/"$F"_hostmapped.s6.out.fastq \
 	semiperfectmode=t \
@@ -102,6 +108,10 @@ bbmap.sh in=./QC/step_5/"$F"_R1.s5.out.fastq in2=./QC/step_5/"$F"_R2.s5.out.fast
 	ordered=t \
 	path=$HOSTPATH \
 	ow=t;
+
+#re-establish loop to finish everything
+for i in *_R1.fastq.gz; do
+        F=`basename $i _R1.fastq.gz`;
 
 # Step 7: Trim low-quality bases
 bbduk.sh in=./QC/step_6/"$F"_unmapped.s6.out.fastq \
