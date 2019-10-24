@@ -1,8 +1,8 @@
-#!/bin/bash bash
+#!/bin/bash
 
 # Set bash options for proper failure recognition
-set -o errext
-set -o pipefail
+#set -o errext
+#set -o pipefail
 
 ### DESCRIPTION ###
 # Script to remove non-biological sequences (primers, adapters), low-quality bases, host-sequences and obiovus (100% ID)  bacterial sequences from virome sequenced libraries

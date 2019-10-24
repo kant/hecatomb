@@ -1,13 +1,13 @@
-et bash options for proper failure recognition
-#set -o errext
-#set -o pipefail
+#!/bin/bash
 
 ### DESCRIPTION ###
-# Script to remove non-biological sequences (primers, adapters), low-quality bases, host-sequences and obiovus (100% ID)
-  bacterial sequences from virome sequenced libraries
+# Script to remove non-biological sequences (primers, adapters), low-quality bases, host-sequences and obiovus (100% ID) bacterial sequences from virome sequenced libraries
 # References:
 # Heavy reliance on:
         # BBtools: https://jgi.doe.gov/data-and-tools/bbtools/
+
+##function for joining array, thanks stack!
+function join_by { local IFS="$1"; shift; echo "$*"; }
 
 # Set Variables
 CONPATH=/mnt/data1/databases/contaminants # adapter/primers
@@ -26,8 +26,7 @@ for i in *_R1.fastq.gz; do
 # Summary:
         # Step 0: Clumpify reads (https://jgi.doe.gov/data-and-tools/bbtools/bb-tools-user-guide/clumpify-guide/)
         # Step 1: Remove 5' amplification primer
-        # Step 2: Remove 3' read through contaminant (Reverse complement of amplification primer + 6 bases of the adapte
-r)
+        # Step 2: Remove 3' read through contaminant (Reverse complement of amplification primer + 6 bases of the adapter)
         # Step 3: Remove primer free adapter (both orientations)
         # Step 4: Remove adapter free primer (both orientations)
         # Step 5: PhiX Removal and vector contamination removal
@@ -146,7 +145,7 @@ bbmerge.sh in1=./QC/step_7/"$F"_R1.s7.out.fastq in2=./QC/step_7/"$F"_R2.s7.out.f
         -Xmx128g \
         ow=t;
 
-        # Split singletons and combine R1 and R2 files
+        #Split singletons and combine R1 and R2 files
         grep -A 3 '1:N:' ./QC/step_7/"$F"_singletons.s7.out.fastq | sed '/^--$/d' > ./QC/step_7/"$F"_singletons_R1.out.fastq;
         grep -A 3 '2:N:' ./QC/step_7/"$F"_singletons.s7.out.fastq | sed '/^--$/d' > ./QC/step_7/"$F"_singletons_R2.out.fastq;
 
