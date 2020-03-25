@@ -40,8 +40,7 @@ PATTERN_R2 = '{sample}_R2'
 	# Step 5: PhiX Removal and vector contamination removal
 	# Step 6: Host-removal
 	# Step 7: Trim low-quality bases
-	# Step 8: Read correction, merging and extension
-	# Step 9: Remove bacterial contaminants reserving viral and aambiguous sequences
+	# Step 8: Remove bacterial contaminants reserving viral and aambiguous sequences
 
 
 rule all:
@@ -258,6 +257,7 @@ rule repair:
     Step 6b. Repair the paired ends
     """
     input:
+	# Step 8: Read correction, merging and extension
         unmapped = os.path.join(QC, "step_6", "{sample}.unmapped.s6.out.fastq"),
     output:
         r1 = os.path.join(QC, "step_6", PATTERN_R1 + ".s6.out.fastq"),
@@ -287,24 +287,6 @@ rule trim_low_quality:
             out={output.r1} out2={output.r2} outs={output.singletons} \
             stats={output.stats} \
             qtrim=r trimq=20 maxns=2 minlength=50 ordered=t ow=t;
-        """
-
-rule merge_reads:
-    """
-    Step 8: Merge forward (R1) and reverse (R2) reads
-    """
-    input:
-        r1 = os.path.join(QC, "step_7", PATTERN_R1 + ".s7.out.fastq"),
-        r2 = os.path.join(QC, "step_7", PATTERN_R2 + ".s7.out.fastq"),
-    output:
-        merged = os.path.join(QC, "step_8", "{sample}.merged.fastq"),
-        r1 = os.path.join(QC, "step_8", PATTERN_R1 + ".unmerged.fastq"),
-        r2 = os.path.join(QC, "step_8", PATTERN_R2 + ".unmerged.fastq"),
-    shell:
-        """
-        bbmerge.sh in1={input.r1} in2={input.r2} \
-            out={output.merged} outu1={output.r1} outu2={output.r2} \
-            rem k=62 extend2=50 ecct vstrict=t ordered=t -Xmx128g ow=t;
         """
 
 """
@@ -343,8 +325,7 @@ rule concat_r1:
     Step 8c.i Concatenate reads
     """
     input:
-        merged = os.path.join(QC, "step_8", "{sample}.merged.fastq"),
-        r1 = os.path.join(QC, "step_8", PATTERN_R1 + ".unmerged.fastq"),
+        r1 = os.path.join(QC, "step_7", PATTERN_R1 + ".s7.out.fastq"),
         r1singletons = os.path.join(QC, "step_8", "{sample}.singletons.R1.out.fastq")
     output:
         r1combo = os.path.join(QC, "step_8", PATTERN_R1 + ".s8.out.fastq"),
@@ -358,8 +339,7 @@ rule concat_r2:
     Step 8c.ii Concatenate reads
     """
     input:
-        merged = os.path.join(QC, "step_8", "{sample}.merged.fastq"),
-        r2 = os.path.join(QC, "step_8", PATTERN_R2 + ".unmerged.fastq"),
+        r2 = os.path.join(QC, "step_7", PATTERN_R2 + ".s7.out.fastq"),
         r2singletons = os.path.join(QC, "step_8", "{sample}.singletons.R2.out.fastq")
     output:
         r2combo = os.path.join(QC, "step_8", PATTERN_R2 + ".s8.out.fastq")
