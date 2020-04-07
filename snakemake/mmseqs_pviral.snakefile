@@ -9,7 +9,6 @@ References:
 Heavy reliance on:
         # mmseqs2: https://github.com/soedinglab/MMseqs2
         # pullseq: https://github.com/bcthomas/pullseq
-        # SeqKit: https://bioinf.shenwei.me/seqkit/
 
 REQUIRES that targetDB has already been indexed
 If it has not been index then run the following script in the directory of your choice: uniprot_viral_DB_build.sh (found in /accessory)                                                                  
@@ -39,6 +38,9 @@ if not config:
 
 
 DBDIR = config['Paths']['Databases']
+TMPDIR = config['Paths']['Temp']
+if not os.path.exists(TMPDIR):
+    os.mkdir(TMPDIR)
 
 # paths for our databases
 PROTPATH = os.path.join(DBDIR, "proteins")
@@ -66,14 +68,12 @@ if not os.path.exists(VIRDB):
     sys.stderr.write(" have installed the databases\n")
     sys.exit()
 
-# Phage lineages. We normally read this from a text file
-#TODO do we want it as a file or a set?
-def phage_lineages:
-    pl = set()
-    with open("../base/phage_taxonomic_lineages.txt", 'r') as f:
-        for l in f:
-            pl.add(l.strip())
-    return pl
+PHAGE_LINEAGES = os.path.join(DBDIR, "phages", "phage_taxonomic_lineages.txt")
+if not os.path.exists(PHAGE_LINEAGES):
+    sys.stderr.write("FATAL: phages/phage_taxonomic_lineages.txt not ")
+    sys.stderr.write("found in the databases directory. Please check ")
+    sys.stderr.write("you have the latest version of the databases\n")
+    sys.exit()
 
 
 
@@ -83,12 +83,9 @@ def phage_lineages:
 
 
 
-
-
-
-
-
-
+rule all:
+    input:
+        os.path.join(AA_OUT, "phage_seqs.list")
 
 
 rule convert_seqtable_to_fasta:
@@ -97,7 +94,7 @@ rule convert_seqtable_to_fasta:
     output:
         os.path.join(RESULTS, "seqtable.fasta")
     shell:
-        "seqkit tab2fx {input} -w 5000 -o {output}"
+        "sed -e 's/^/>/; s/\\t/\\n/' {input} > {output}"
 
 rule create_seqtable_db:
     input:
@@ -105,18 +102,19 @@ rule create_seqtable_db:
     output:
         os.path.join(AA_OUT, "seqtable_query.db")
     shell:
-        "mmseqs createdb {input} {output} --dont-shuffle 0 --dbtype 0"
+        "mmseqs createdb --shuffle 0 --dbtype 0 {input} {output}"
 
 rule seqtable_taxsearch:
     input:
         sq = os.path.join(AA_OUT, "seqtable_query.db"),
         db = os.path.join(PROTPATH, "uniprot_virus_c99.db")
     output:
-        tr = os.path.join(AA_OUT, "taxonomyResult"),
-        aa = os.path.join(AA_OUT, "tmp_aa")
+        tr = os.path.join(AA_OUT, "taxonomyResult.dbtype")
+    params:
+        tr = os.path.join(AA_OUT, "taxonomyResult")
     shell:
         """
-        mmseqs taxonomy {input.sq} {input.db} {output.tr} {output.aa} \
+        mmseqs taxonomy {input.sq} {input.db} {params.tr} $(mktemp -d -p {TMPDIR}) \
         -a --start-sens 1 --sens-steps 3 -s 7 \
         --search-type 2 --tax-output-mode 1
         """
@@ -125,31 +123,93 @@ rule seqtable_convert_alignments:
     input:
         sq = os.path.join(AA_OUT, "seqtable_query.db"),
         db = os.path.join(PROTPATH, "uniprot_virus_c99.db"),
+        tr = os.path.join(AA_OUT, "taxonomyResult.dbtype")
+    params:
         tr = os.path.join(AA_OUT, "taxonomyResult")
     output:
         os.path.join(AA_OUT, "aln.m8")
     shell:
         """
-        mmseqs convertalis {input.sq} {input.db} {input.tr} {output} \
+        mmseqs convertalis {input.sq} {input.db} {params.tr} {output} \
         --format-output "query,target,pident,alnlen,mismatch,gapopen,qstart,qend,tstart,tend,evalue,bits,qaln,taln"
         """
 
 rule seqtable_lca:
     input:
         db = os.path.join(PROTPATH, "uniprot_virus_c99.db"),
-        tr = os.path.join(AA_OUT, "taxonomyResult")
+        tr = os.path.join(AA_OUT, "taxonomyResult.dbtype")
     output:
-        os.path.join(AA_OUT, "lca.db")
+        os.path.join(AA_OUT, "lca.db.dbtype")
+    params:
+        lc = os.path.join(AA_OUT, "lca.db"),
+        tr = os.path.join(AA_OUT, "taxonomyResult")
     shell:
         """
-        mmseqs lca {input.db} {input.tr} {output} --tax-lineage true \
-        --lca-ranks "superkingdom:phylum:class:order:family:genus:species"
+        mmseqs lca {input.db} {params.tr} {params.lc} --tax-lineage true \
+        --lca-ranks "superkingdom,phylum,class,order,family,genus,species"
         """
-    
 
+rule seqtable_taxtable_tsv:
+    input:
+        sq = os.path.join(AA_OUT, "seqtable_query.db"),
+        lc = os.path.join(AA_OUT, "lca.db.dbtype")
+    params:
+        lc = os.path.join(AA_OUT, "lca.db")
+    output:
+        os.path.join(AA_OUT, "taxonomyResult.tsv")
+    shell:
+        """
+        mmseqs createtsv {input.sq} {params.lc} {output}
+        """
 
+rule seqtable_create_kraken:
+    input:
+        db = os.path.join(PROTPATH, "uniprot_virus_c99.db"),
+        lc = os.path.join(AA_OUT, "lca.db")
+    output:
+        os.path.join(AA_OUT, "taxonomyResult.report")
+    shell:
+        """
+        mmseqs taxonomyreport {input.db} {input.lc} {output}
+        """
 
+## Adjust taxonomy table and extract viral lineages
+# Extract all (virus + phage) potential viral sequences
 
+rule find_viruses:
+    input:
+        os.path.join(AA_OUT, "taxonomyResult.tsv")
+    output:
+        os.path.join(AA_OUT, "all_viruses_table.tsv")
+    shell:
+        """
+        grep 'Viruses:' {input} | cut -f1,5 | sed 's/phi14:2/phi14_2/g' | \
+                sed 's/:/\\t/g' | \
+                sort -n -k1 > {output}
+        """
+
+rule find_phages:
+    input:
+        av = os.path.join(AA_OUT, "all_viruses_table.tsv")
+    output:
+        os.path.join(AA_OUT, "phage_table.tsv")
+    shell:
+        "grep -f {PHAGE_LINEAGES} {input.av} > {output}"
+
+rule find_phage_seqs:
+    input:
+        os.path.join(AA_OUT, "phage_table.tsv")
+    output:
+        os.path.join(AA_OUT, "phage_seqs.list")
+    shell:
+        "cut -f1 {input} > {output}"
+
+#rule pull_phage_seqs:
+
+# Extract phage lineages and generate taxonomy table for import into R as PhyloSeq object
+#grep -f $PHAGE $OUT/all_viruses_table.tsv > $OUT/phage_table.tsv;
+#cut -f1 $OUT/phage_table.tsv > $OUT/phage_seqs.list;
+#pullseq -i ./results/seqtable.fasta -n $OUT/phage_seqs.list -l 5000 > $OUT/phage_seqs.fasta;
 
 
 
