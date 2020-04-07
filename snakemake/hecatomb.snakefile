@@ -50,7 +50,6 @@ PATTERN_R2 = '{sample}_R2'
 	# Step 5: PhiX Removal and vector contamination removal
 	# Step 6: Host-removal
 	# Step 7: Trim low-quality bases
-	# Step 8: Read correction, merging and extension
 	# Step 9: Remove bacterial contaminants reserving viral and aambiguous sequences
     # Step 10: Remove exact duplicates
     # Step 11: Dereplicate
@@ -258,97 +257,22 @@ rule trim_low_quality:
             qtrim=r trimq=20 maxns=2 minlength=50 ordered=t ow=t;
         """
 
-rule merge_reads:
-    """
-    Step 8: Merge forward (R1) and reverse (R2) reads
-    """
-    input:
-        r1 = os.path.join(QC, "step_7", PATTERN_R1 + ".s7.out.fastq"),
-        r2 = os.path.join(QC, "step_7", PATTERN_R2 + ".s7.out.fastq"),
-    output:
-        merged = os.path.join(QC, "step_8", "{sample}.merged.fastq"),
-        r1 = os.path.join(QC, "step_8", PATTERN_R1 + ".unmerged.fastq"),
-        r2 = os.path.join(QC, "step_8", PATTERN_R2 + ".unmerged.fastq"),
-    shell:
-        """
-        bbmerge.sh in1={input.r1} in2={input.r2} \
-            out={output.merged} outu1={output.r1} outu2={output.r2} \
-            rem k=62 extend2=50 ecct vstrict=t ordered=t {XMX} ow=t;
-        """
-
 """
-In the original contaminant_removal.sh pipeline these were sequential. 
-However, snakemake can easily run these in parallel as they
-are independent. So I split them into a few separate rules
+Currently from this point forwards we just work with the R1 reads.
+In a previous iteration we merged the reads but that has been removed
 """
-
-rule get_r1_singletons:
-    """
-    Step 8b.i Split R1 singletons
-    """
-    input:
-        singletons = os.path.join(QC, "step_7", "{sample}.singletons.s7.out.fastq")
-    output:
-        r1singletons = os.path.join(QC, "step_8", "{sample}.singletons.R1.out.fastq"),
-    shell:
-        """
-        grep --no-group-separator -A 3 '1:N:' {input.singletons} > {output.r1singletons};
-        """
-rule get_r2_singletons:
-    """
-    Step 8b.ii Split R2 singletons
-    """
-    input:
-        singletons = os.path.join(QC, "step_7", "{sample}.singletons.s7.out.fastq")
-    output:
-        r2singletons = os.path.join(QC, "step_8", "{sample}.singletons.R2.out.fastq")
-    shell:
-        """
-        grep --no-group-separator -A 3 '2:N:' {input.singletons} > {output.r2singletons};
-        """
-
-rule concat_r1:
-    """
-    Step 8c.i Concatenate reads
-    """
-    input:
-        merged = os.path.join(QC, "step_8", "{sample}.merged.fastq"),
-        r1 = os.path.join(QC, "step_8", PATTERN_R1 + ".unmerged.fastq"),
-        r1singletons = os.path.join(QC, "step_8", "{sample}.singletons.R1.out.fastq")
-    output:
-        r1combo = os.path.join(QC, "step_8", PATTERN_R1 + ".s8.out.fastq"),
-    shell:
-        """
-        cat {input.merged} {input.r1} {input.r1singletons} > {output.r1combo};
-        """
-
-rule concat_r2:
-    """
-    Step 8c.ii Concatenate reads
-    """
-    input:
-        merged = os.path.join(QC, "step_8", "{sample}.merged.fastq"),
-        r2 = os.path.join(QC, "step_8", PATTERN_R2 + ".unmerged.fastq"),
-        r2singletons = os.path.join(QC, "step_8", "{sample}.singletons.R2.out.fastq")
-    output:
-        r2combo = os.path.join(QC, "step_8", PATTERN_R2 + ".s8.out.fastq")
-    shell:
-        """
-        cat {input.merged} {input.r2} {input.r2singletons} > {output.r2combo};
-        """
 
 rule remove_bacteria:
     """
-    Step 9: Remove bacterial contaminants reserving viral and ambiguous sequences
+    Step 8: Remove bacterial contaminants reserving viral and ambiguous sequences
     """
     input:
-        r1 = os.path.join(QC, "step_8", PATTERN_R1 + ".s8.out.fastq"),
-        r2 = os.path.join(QC, "step_8", PATTERN_R2 + ".s8.out.fastq"),
+        r1 = os.path.join(QC, "step_7", PATTERN_R1 + ".s7.out.fastq"),
         bacpath = os.path.join(BACPATH, "ref")
     output:
-        mapped = os.path.join(QC, "step_9", "{sample}.bacterial.fastq"),
-        unmapped = os.path.join(QC, "step_9", "{sample}.viral_amb.fastq"),
-        scafstats = os.path.join(QC, "step_9", "{sample}.scafstats.txt")
+        mapped = os.path.join(QC, "step_8", "{sample}_R1.bacterial.fastq"),
+        unmapped = os.path.join(QC, "step_8", "{sample}_R1.viral_amb.fastq"),
+        scafstats = os.path.join(QC, "step_8", "{sample}_R1.scafstats.txt")
     params:
         bacpath = BACPATH
     shell:
@@ -363,12 +287,12 @@ rule remove_bacteria:
 
 rule remove_exact_dups:
     """
-    Step 10: Remove exact duplicates
+    Step 9: Remove exact duplicates
     """
     input:
-        os.path.join(QC, "step_9", "{sample}.viral_amb.fastq")
+        os.path.join(QC, "step_8", "{sample}_R1viral_amb.fastq")
     output:
-        os.path.join(QC, "step_10", "{sample}_R1.s9.deduped.out.fastq")
+        os.path.join(QC, "step_9", "{sample}_R1.s9.deduped.out.fastq")
     shell:
         """
         dedupe.sh in={input} \
@@ -378,13 +302,13 @@ rule remove_exact_dups:
 
 rule deduplicate:
     """
-    Step 11: Dereplicate
+    Step 10: Dereplicate
     """
     input:
-        os.path.join(QC, "step_10", "{sample}_R1.s9.deduped.out.fastq")
+        os.path.join(QC, "step_9", "{sample}_R1.s9.deduped.out.fastq")
     output:
-        fa = os.path.join(QC, "step_11", "{sample}_R1.best.fasta"),
-        stats = os.path.join(QC, "step_11", "{sample}_stats.txt")
+        fa = os.path.join(QC, "step_10", "{sample}_R1.best.fasta"),
+        stats = os.path.join(QC, "step_10", "{sample}_R1.stats.txt")
     shell:
         """
         dedupe.sh in={input} \
@@ -394,12 +318,12 @@ rule deduplicate:
 
 rule extract_seq_counts:
     """
-    Step 12: Extract sequences and counts for seqtable (count table)
+    Step 11: Extract sequences and counts for seqtable (count table)
     """
     input:
-        os.path.join(QC, "step_11", "{sample}_R1.best.fasta")
+        os.path.join(QC, "step_10", "{sample}_R1.best.fasta")
     output:
-        os.path.join(QC, "step_12", "{sample}_reformated.fasta")
+        os.path.join(QC, "step_11", "{sample}_R1.reformated.fasta")
     shell:
         """
         reformat.sh in={input} out={output} \
@@ -410,12 +334,12 @@ rule extract_seq_counts:
 
 rule extract_counts:
     """
-    Step 13. Parse and combine stats and contig files
+    Step 12. Parse and combine stats and contig files
     """
     input:
-        os.path.join(QC, "step_12", "{sample}_reformated.fasta") 
+        os.path.join(QC, "step_11", "{sample}_R1.reformated.fasta") 
     output:
-        os.path.join(QC, "counts", "{sample}_seqs.txt")
+        os.path.join(QC, "counts", "{sample}_R1.seqs.txt")
     shell:
         """
         grep -v '>' {input} | sed '1i sequence' > {output}
@@ -423,12 +347,12 @@ rule extract_counts:
 
 rule extract_counts_ids:
     """
-    Step 13b. Extract sequence IDs
+    Step 12b. Extract sequence IDs
     """
     input:
-        os.path.join(QC, "step_12", "{sample}_reformated.fasta")
+        os.path.join(QC, "step_11", "{sample}_R1.reformated.fasta")
     output:
-        os.path.join(QC, "counts", "{sample}_contig_ids.txt")
+        os.path.join(QC, "counts", "{sample}_R1.contig_ids.txt")
     shell:
         """
         grep '>' {input} | sed 's|>Cluster_||' | awk -F "," '{{ print$1 }}' | sort -n | sed '1i contig_ids' > {output}
@@ -436,12 +360,12 @@ rule extract_counts_ids:
 
 rule exract_count_stats:
     """
-    Step 13c. Extract counts
+    Step 12c. Extract counts
     """
     input:
-        os.path.join(QC, "step_11", "{sample}_stats.txt")
+        os.path.join(QC, "step_10", "{sample}_R1.stats.txt")
     output:
-        os.path.join(QC, "counts", "{sample}_counts.txt")
+        os.path.join(QC, "counts", "{sample}_R1.counts.txt")
     params:
         s = "{sample}"
     shell:
@@ -451,11 +375,11 @@ rule exract_count_stats:
 
 rule create_seq_table:
     """
-    Step 13d. Create sequence table
+    Step 12d. Create sequence table
     """
     input:
-        seq = os.path.join(QC, "counts", "{sample}_seqs.txt"),
-        cnt = os.path.join(QC, "counts", "{sample}_counts.txt")
+        seq = os.path.join(QC, "counts", "{sample}_R1.seqs.txt"),
+        cnt = os.path.join(QC, "counts", "{sample}_R1.counts.txt")
     output:
         os.path.join(QC, "counts", "{sample}_seqtable.txt")
     shell:
