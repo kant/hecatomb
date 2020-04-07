@@ -24,7 +24,7 @@ CONPATH = os.path.join(DBDIR, "contaminants")
 
 # paths for our data. This is where we will read and put things
 READDIR = config['Paths']['Reads']
-CLUMPED = config['Output']["clumped"]
+CLUMPED = config['Output']["Clumped"]
 QC = config['Output']['QC']
 
 SAMPLES, = glob_wildcards(os.path.join(READDIR, '{sample}_R1.fastq.gz'))
