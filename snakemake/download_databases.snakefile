@@ -121,6 +121,19 @@ rule download_id_taxonomy_mapping:
     shell:
         "cd {TAXPATH} && curl -LO {id_mapping_url}"
 
+rule extract_id_taxonomy_mapping:
+    """
+    Just performed as a separate action to abstract
+    downloading and extraction
+    """
+    input:
+        os.path.join(TAXPATH, "idmapping.dat.gz")
+    output:
+        os.path.join(TAXPATH, "idmapping.dat")
+    shell:
+        "gunzip {input}"
+
+
 rule extract_ncbi_taxonomy:
     input:
         os.path.join(TAXPATH, "taxdump.tar.gz")
@@ -160,7 +173,7 @@ rule mmseqs_uniprot_taxdb:
     input:
         vdb = os.path.join(PROTPATH, "uniprot_virus_c99.db"),
         tax = os.path.join(TAXPATH, "nodes.dmp"),
-        idm = os.path.join(TAXPATH, "idmapping.dat.gz")
+        idm = os.path.join(TAXPATH, "idmapping.dat")
     params:
         tax = TAXPATH
     output:
