@@ -21,7 +21,6 @@ We use [mmseqs](https://github.com/soedinglab/MMseqs2) for a lot of the clusteri
 
 There are a couple of issues that we have encountered with `mmseqs` that we have worked around.
 - `mmseqs` creates one output file per core, and so you don't know, *a priori* how many or which output files are produced (which is required for snakemake rules!). However, per [this issue](https://github.com/soedinglab/MMseqs2/issues/292) you can use the `.dbtype` and `.index` files to track when `mmseqs` has completed.
-
-
+- `mmseqs` requests a temporary directory for many of its computations, but then sets a symlink to it called "latest". The problem is if you fire off lots of `mmseqs` jobs concurrently they overwrite each other. We use the standard `bash` approach of creating temporary directories using `mktemp`. We start with a single location to hold them (saved as the variable `TMPDIR`), and then use this call in the `shell` to create a new temporary directory: `$(mktemp -d -p {TMPDIR})`. Each directory is unique. 
 
 
