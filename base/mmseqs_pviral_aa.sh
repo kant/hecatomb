@@ -36,7 +36,7 @@ mmseqs convertalis $OUT/seqtable_queryDB $DB $OUT/taxonomyResult $OUT/aln.m8 \
 	--format-output "query,target,pident,alnlen,mismatch,gapopen,qstart,qend,tstart,tend,evalue,bits,qaln,taln";
 
 mmseqs lca $DB $OUT/taxonomyResult $OUT/lcaDB --tax-lineage true \
-	--lca-ranks "superkingdom:phylum:class:order:family:genus:species";
+	--lca-ranks "superkingdom,phylum,class,order,family,genus,species";
 
 # create taxonomy table (tsv)
 mmseqs createtsv $OUT/seqtable_queryDB $OUT/lcaDB $OUT/taxonomyResult.tsv;
@@ -46,8 +46,8 @@ mmseqs taxonomyreport $DB $OUT/lcaDB $OUT/taxonomyResult.report;
 
 ## Adjust taxonomy table and extract viral lineages
 # Extract all (virus + phage) potential viral sequences
-grep 'Viruses:' $OUT/taxonomyResult.tsv | cut -f1,5 | sed 's/phi14:2/phi14_2/g' | \
-	sed 's/:/\t/g' | \
+grep 'Viruses;' $OUT/taxonomyResult.tsv | cut -f1,5 | sed 's/phi14:2/phi14_2/g' | \
+	sed 's/;/\t/g' | \
 	sort -n -k1 > $OUT/all_viruses_table.tsv;
 
 # Extract phage lineages and generate taxonomy table for import into R as PhyloSeq object
