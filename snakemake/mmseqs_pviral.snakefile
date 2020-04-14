@@ -77,16 +77,11 @@ if not os.path.exists(PHAGE_LINEAGES):
 
 
 
-
-
-
-
-
-
 rule all:
     input:
-        os.path.join(AA_OUT, "phage_seqs.list")
-
+        os.path.join(AA_OUT, "phage_tax_table.tsv"),
+        os.path.join(AA_OUT, "viruses_tax_table.tsv"),
+        os.path.join(AA_OUT, "unclassified_seqs.fasta")
 
 rule convert_seqtable_to_fasta:
     input:
@@ -146,7 +141,7 @@ rule seqtable_lca:
     shell:
         """
         mmseqs lca {input.db} {params.tr} {params.lc} --tax-lineage true \
-        --lca-ranks "superkingdom,phylum,class,order,family,genus,species"
+        --lca-ranks "superkingdom,phylum,class,order,family,genus,species";
         """
 
 rule seqtable_taxtable_tsv:
@@ -183,11 +178,12 @@ rule find_viruses:
         os.path.join(AA_OUT, "all_viruses_table.tsv")
     shell:
         """
-        grep 'Viruses:' {input} | cut -f1,5 | sed 's/phi14:2/phi14_2/g' | \
-                sed 's/:/\\t/g' | \
+        grep 'Viruses;' {input} | cut -f1,5 | sed 's/phi14:2/phi14_2/g' | \
+                sed 's/;/\\t/g' | \
                 sort -n -k1 > {output}
         """
 
+# Extract phage viral lineages and generate taxonomy table for import into R as PhyloSeq object
 rule find_phages:
     input:
         av = os.path.join(AA_OUT, "all_viruses_table.tsv")
@@ -204,13 +200,115 @@ rule find_phage_seqs:
     shell:
         "cut -f1 {input} > {output}"
 
-#rule pull_phage_seqs:
+rule pull_phage_seqs:
+    input:
+        fa = os.path.join(RESULTS, "seqtable.fasta"),
+        ls = os.path.join(AA_OUT, "phage_seqs.list")
+    output:
+        os.path.join(AA_OUT, "phage_seqs.fasta")
+    shell:
+        """
+        grep --no-group-separator -A 1 -Fwf {input.ls} {input.fa} > {output}
+        """
 
-# Extract phage lineages and generate taxonomy table for import into R as PhyloSeq object
-#grep -f $PHAGE $OUT/all_viruses_table.tsv > $OUT/phage_table.tsv;
-#cut -f1 $OUT/phage_table.tsv > $OUT/phage_seqs.list;
-#pullseq -i ./results/seqtable.fasta -n $OUT/phage_seqs.list -l 5000 > $OUT/phage_seqs.fasta;
+rule phage_seqs_to_tab:
+    input:
+        os.path.join(AA_OUT, "phage_seqs.fasta")
+    output:
+        os.path.join(AA_OUT, "phage_seqs.tab")
+    shell:
+        """
+        perl -pe 'if (s/^>//) {{chomp; s/$/\t/}}' {input} > {output}
+        """
+
+rule phage_to_tax_table:
+    input:
+        tab = os.path.join(AA_OUT, "phage_seqs.tab"),
+        tsv = os.path.join(AA_OUT, "phage_table.tsv")
+    output:
+        os.path.join(AA_OUT, "phage_tax_table.tsv")
+    shell:
+        """
+        join {input.tab} {input.tsv} | \
+        cut -d ' ' --output-delimiter=$'\t' -f 2-9 | \
+        sed '1isequence\tKingdom\tPhylum\tClass\tOrder\tFamily\tGenus\tSpecies' \
+        > {output}
+        """
+
+# Extract non-phage viral lineages and generate taxonomy table for import into R as PhyloSeq object
+rule find_non_phages:
+    input:
+        av = os.path.join(AA_OUT, "all_viruses_table.tsv")
+    output:
+        os.path.join(AA_OUT, "viruses_table.tsv")
+    shell:
+        "grep -vf {PHAGE_LINEAGES} {input.av} > {output}"
+
+rule find_non_phage_seqs:
+    input:
+        os.path.join(AA_OUT, "viruses_table.tsv")
+    output:
+        os.path.join(AA_OUT, "viruses_seqs.list")
+    shell:
+        "cut -f1 {input} > {output}"
+
+rule pull_non_phage_seqs:
+    input:
+        fa = os.path.join(RESULTS, "seqtable.fasta"),
+        ls = os.path.join(AA_OUT, "viruses_seqs.list")
+    output:
+        os.path.join(AA_OUT, "viruses_seqs.fasta")
+    shell:
+        """
+        grep --no-group-separator -A 1 -Fwf {input.ls} {input.fa} > {output}
+        """
+
+rule non_phage_seqs_to_tab:
+    input:
+        os.path.join(AA_OUT, "viruses_seqs.fasta")
+    output:
+        os.path.join(AA_OUT, "viruses_seqs.tab")
+    shell:
+        """
+        perl -pe 'if (s/^>//) {{chomp; s/$/\t/}}' {input} > {output}
+        """
+
+rule non_phage_to_tax_table:
+    input:
+        tab = os.path.join(AA_OUT, "viruses_seqs.tab"),
+        tsv = os.path.join(AA_OUT, "viruses_table.tsv")
+    output:
+        os.path.join(AA_OUT, "viruses_tax_table.tsv")
+    shell:
+        """
+        join {input.tab} {input.tsv} | \
+        cut -d ' ' --output-delimiter=$'\t' -f 2-9 | \
+        sed '1isequence\tKingdom\tPhylum\tClass\tOrder\tFamily\tGenus\tSpecies' \
+        > {output}
+        """
 
 
+# Extract unclassified lineages
+rule unclassified_lineages:
+    input:
+        os.path.join(AA_OUT, "taxonomyResult.tsv")
+    output:
+        os.path.join(AA_OUT, "pviral_unclassified_seqs.list")
+    shell:
+        """
+        grep -v 'Viruses;' {input} | cut -f1 | \
+                sort -n -k1 > {output}
+        """
+
+rule pull_unclassified_seqs:
+    input:
+        fa = os.path.join(RESULTS, "seqtable.fasta"),
+        ls = os.path.join(AA_OUT, "pviral_unclassified_seqs.list")
+    output:
+        os.path.join(AA_OUT, "unclassified_seqs.fasta")
+    shell:
+        """
+        grep --no-group-separator -A 1 -Fwf {input.ls} {input.fa} > {output}
+        """
 
 
