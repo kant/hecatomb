@@ -47,7 +47,7 @@ rule all:
         os.path.join(PROTPATH, "uniprot_virus.faa"),
         os.path.join(TAXPATH, "uniprot_ncbi_mapping.dat"),
         multiext(os.path.join(PROTPATH, "uniprot_virus_c99"), ".db_mapping", ".db_names.dmp", ".db_nodes.dmp", ".db_merged.dmp", ".db_delnodes.dmp"),
-        multiext(os.path.join(URVPATH, "uniref50_virus.db"), ".db_mapping", ".db_names.dmp", ".db_nodes.dmp", ".db_merged.dmp", ".db_delnodes.dmp")
+        multiext(os.path.join(URVPATH, "uniref50_virus"), ".db_mapping", ".db_names.dmp", ".db_nodes.dmp", ".db_merged.dmp", ".db_delnodes.dmp")
 
 
 
@@ -224,7 +224,7 @@ rule mmseqs_urv_taxonomy:
     params:
         tax = TAXPATH
     output:
-        multiext(os.path.join(URVPATH, "uniref50_virus.db"), ".db_mapping", ".db_names.dmp", ".db_nodes.dmp", ".db_merged.dmp", ".db_delnodes.dmp")
+        multiext(os.path.join(URVPATH, "uniref50_virus"), ".db_mapping", ".db_names.dmp", ".db_nodes.dmp", ".db_merged.dmp", ".db_delnodes.dmp")
     shell:
         """
         mmseqs createtaxdb --ncbi-tax-dump {params.tax} --tax-mapping-file {input.idm} {input.vdb} $(mktemp -d -p {TMPDIR})
