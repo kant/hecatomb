@@ -28,6 +28,10 @@ CONPATH  = os.path.join(DBDIR, "contaminants")
 PROTPATH = os.path.join(DBDIR, "proteins")
 TAXPATH  = os.path.join(DBDIR, "taxonomy")
 
+# these are just derivied from above
+URVPATH = os.path.join(PROTPATH, "uniref_plus_virus") # uniref50 + viruses
+
+
 # URLs where we download the data from
 id_mapping_url    = "https://ftp.expasy.org/databases/uniprot/current_release/knowledgebase/idmapping/idmapping.dat.gz"
 hecatomb_db_url   = "https://edwards.sdsu.edu/CERVAID/databases/hecatomb.databases.tar.bz2"
@@ -41,7 +45,10 @@ rule all:
         os.path.join(BACPATH, "ref"),
         os.path.join(HOSTPATH, "ref"),
         os.path.join(PROTPATH, "uniprot_virus.faa"),
-        multiext(os.path.join(PROTPATH, "uniprot_virus_c99"), ".db_mapping", ".db_names.dmp", ".db_nodes.dmp", ".db_merged.dmp", ".db_delnodes.dmp")
+        os.path.join(TAXPATH, "uniprot_ncbi_mapping.dat"),
+        multiext(os.path.join(PROTPATH, "uniprot_virus_c99"), ".db_mapping", ".db_names.dmp", ".db_nodes.dmp", ".db_merged.dmp", ".db_delnodes.dmp"),
+        multiext(os.path.join(URVPATH, "uniref50_virus.db"), ".db_mapping", ".db_names.dmp", ".db_nodes.dmp", ".db_merged.dmp", ".db_delnodes.dmp")
+
 
 
 """
@@ -108,6 +115,12 @@ rule download_uniprot_viruses:
         mkdir -p {PROTPATH} && curl -Lo {output} {uniprot_virus_url}"
         """
 
+rule download_uniref50:
+    output:
+        os.path.join(PROTPATH, "uniref50.fasta.gz")
+    shell:
+        "mkdir -p {PROTPATH} && curl -Lo {output} ftp://ftp.uniprot.org/pub/databases/uniprot/uniref/uniref50/uniref50.fasta.gz"
+
 rule download_ncbi_taxonomy:
     output:
         os.path.join(TAXPATH, "taxdump.tar.gz")
@@ -119,20 +132,21 @@ rule download_id_taxonomy_mapping:
     output:
         os.path.join(TAXPATH, "idmapping.dat.gz")
     shell:
-        "cd {TAXPATH} && curl -LO {id_mapping_url}"
+        """
+        cd {TAXPATH};
+        curl -LO {id_mapping_url}
+        """
 
-rule extract_id_taxonomy_mapping:
-    """
-    Just performed as a separate action to abstract
-    downloading and extraction
-    """
+
+rule uniprot_to_ncbi_mapping:
     input:
         os.path.join(TAXPATH, "idmapping.dat.gz")
     output:
-        os.path.join(TAXPATH, "idmapping.dat")
+        os.path.join(TAXPATH, "uniprot_ncbi_mapping.dat")
     shell:
-        "gunzip {input}"
-
+        """
+        zcat {input} | awk '$2 == "NCBI_TaxID" {{print $1"\t"$3 }}' > {output}
+        """
 
 rule extract_ncbi_taxonomy:
     input:
@@ -173,7 +187,7 @@ rule mmseqs_uniprot_taxdb:
     input:
         vdb = os.path.join(PROTPATH, "uniprot_virus_c99.db"),
         tax = os.path.join(TAXPATH, "nodes.dmp"),
-        idm = os.path.join(TAXPATH, "idmapping.dat")
+        idm = os.path.join(TAXPATH, "uniprot_ncbi_mapping.dat")
     params:
         tax = TAXPATH
     output:
@@ -182,4 +196,38 @@ rule mmseqs_uniprot_taxdb:
         """
         mmseqs createtaxdb --ncbi-tax-dump {params.tax} --tax-mapping-file {input.idm} {input.vdb} $(mktemp -d -p {TMPDIR})
         """
+
+rule uniref_plus_viruses:
+    input:
+        ur = os.path.join(PROTPATH, "uniref50.fasta.gz"),
+        vr = os.path.join(PROTPATH, "uniprot_virus_c99.faa"),
+    output:
+        os.path.join(URVPATH, "uniref50_virus.fasta") 
+    shell:
+        """
+        unpigz -c {input.ur} | cat - {input.vr} > {output}
+        """
+
+rule mmseqs_urv:
+    input:
+        os.path.join(URVPATH, "uniref50_virus.fasta")
+    output:
+        os.path.join(URVPATH, "uniref50_virus.db")
+    shell:
+        "mmseqs createdb {input} {output}"
+
+rule mmseqs_urv_taxonomy:
+    input:
+        vdb = os.path.join(URVPATH, "uniref50_virus.db"),
+        tax = os.path.join(TAXPATH, "nodes.dmp"),
+        idm = os.path.join(TAXPATH, "uniprot_ncbi_mapping.dat")
+    params:
+        tax = TAXPATH
+    output:
+        multiext(os.path.join(URVPATH, "uniref50_virus.db"), ".db_mapping", ".db_names.dmp", ".db_nodes.dmp", ".db_merged.dmp", ".db_delnodes.dmp")
+    shell:
+        """
+        mmseqs createtaxdb --ncbi-tax-dump {params.tax} --tax-mapping-file {input.idm} {input.vdb} $(mktemp -d -p {TMPDIR})
+        """
+
 
