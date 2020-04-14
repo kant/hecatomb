@@ -17,22 +17,48 @@ if not config:
 
 
 DBDIR = config['Paths']['Databases']
+TMPDIR = config['Paths']['Temp']
+if not os.path.exists(TMPDIR):
+    os.makedirs(TMPDIR, exist_ok=True)
+
 
 # paths for our databases
 BACPATH = os.path.join(DBDIR, "bac_giant_unique_species")
 HOSTPATH = os.path.join(DBDIR, "human_masked")
 CONPATH = os.path.join(DBDIR, "contaminants")
-
+PROTPATH = os.path.join(DBDIR, "proteins")
 
 if not os.path.exists(os.path.join(HOSTPATH, "ref")):
     sys.stderr.write("FATAL: You appear not to have the host databases. Please download the databases using the download_databases.snakefile\n")
     sys.exit()
+
+if not os.path.exists(PROTPATH):
+    sys.stderr.write("FATAL: You appear not to have the protein databases. Please download the databases using the download_databases.snakefile\n")
+    sys.exit()
+
 
 # paths for our data. This is where we will read and put things
 READDIR = config['Paths']['Reads']
 CLUMPED = config['Output']["Clumped"]
 QC = config['Output']['QC']
 RESULTS = config['Output']['Results']
+AA_OUT  = os.path.join(RESULTS, "mmseqs_aa_out")
+if not os.path.exists(AA_OUT):
+    os.makedirs(AA_OUT, exist_ok=True)
+
+VIRDB = os.path.join(PROTPATH, "uniprot_virus_c99.db")
+if not os.path.exists(VIRDB):
+    sys.stderr.write(f"FATAL: {VIRDB} does not exist. Please ensure you")
+    sys.stderr.write(" have installed the databases\n")
+    sys.exit()
+
+PHAGE_LINEAGES = os.path.join(DBDIR, "phages", "phage_taxonomic_lineages.txt")
+if not os.path.exists(PHAGE_LINEAGES):
+    sys.stderr.write("FATAL: phages/phage_taxonomic_lineages.txt not ")
+    sys.stderr.write("found in the databases directory. Please check ")
+    sys.stderr.write("you have the latest version of the databases\n")
+    sys.exit()
+
 
 # how much memory we have
 XMX = config['System']['Memory']
@@ -58,14 +84,9 @@ PATTERN_R2 = '{sample}_R2'
 
 rule all:
     input:
-        # step 9 output
-        # expand(os.path.join(QC, "step_9", "{sample}.viral_amb.fastq"), sample=SAMPLES)
-        # process all the data into a sequence table
-        expand(os.path.join(QC, "counts", "{sample}_seqtable.txt"), sample=SAMPLES),
-        #convert the sequence table into a single outpupt
-        os.path.join(RESULTS, "seqtable_all.tsv"),
-        os.path.join(RESULTS, "seqtable.tab2fx")
-
+        os.path.join(AA_OUT, "phage_tax_table.tsv"),
+        os.path.join(AA_OUT, "viruses_tax_table.tsv"),
+        os.path.join(AA_OUT, "unclassified_seqs.fasta")
 
 
 
@@ -91,7 +112,7 @@ rule clumpify:
         clumpify.sh in={input.r1} in2={input.r2} \
             out={output.r1} out2={output.r2} \
             reorder=a \
-            ow=t;
+            ow=t {XMX}
         """
 
 rule remove_leftmost_primerB:
@@ -113,7 +134,8 @@ rule remove_leftmost_primerB:
             out={output.r1} out2={output.r2} \
             stats={output.stats} \
             k=16 hdist=1 mink=11 ktrim=l restrictleft=20 \
-            removeifeitherbad=f trimpolya=10 ordered=t rcomp=f ow=t
+            removeifeitherbad=f trimpolya=10 ordered=t \
+            rcomp=f ow=t {XMX}
         """
 
 rule remove_3prime_contaminant:
@@ -134,7 +156,8 @@ rule remove_3prime_contaminant:
             ref={input.primers} \
             out={output.r1} out2={output.r2} \
             stats={output.stats} \
-            k=16 hdist=1 mink=11 ktrim=r removeifeitherbad=f ordered=t rcomp=f ow=t;
+            k=16 hdist=1 mink=11 ktrim=r removeifeitherbad=f \
+            ordered=t rcomp=f ow=t {XMX}
         """
 
 rule remove_primer_free_adapter:
@@ -155,7 +178,8 @@ rule remove_primer_free_adapter:
             ref={input.primers} \
             out={output.r1} out2={output.r2} \
             stats={output.stats} \
-            k=16 hdist=1 mink=10 ktrim=r removeifeitherbad=f ordered=t rcomp=t ow=t;
+            k=16 hdist=1 mink=10 ktrim=r removeifeitherbad=f \
+            ordered=t rcomp=t ow=t {XMX}
         """
 
 rule remove_adapter_free_primer:
@@ -176,7 +200,7 @@ rule remove_adapter_free_primer:
             ref={input.primers} \
             out={output.r1} out2={output.r2} \
             stats={output.stats} \
-            k=16 hdist=0 removeifeitherbad=f ordered=t rcomp=t ow=t;
+            k=16 hdist=0 removeifeitherbad=f ordered=t rcomp=t ow=t {XMX}
         """
 
 rule remove_vector_contamination:
@@ -197,7 +221,7 @@ rule remove_vector_contamination:
             ref={input.primers} \
             out={output.r1} out2={output.r2} \
             stats={output.stats} \
-            k=31 hammingdistance=1 ordered=t ow=t;
+            k=31 hammingdistance=1 ordered=t ow=t {XMX}
         """
 
 rule host_removal:
@@ -218,7 +242,7 @@ rule host_removal:
         bbmap.sh in={input.r1} in2={input.r2} \
             outu={output.unmapped} outm={output.mapped} \
             path={params.hostpath} \
-            semiperfectmode=t quickmatch fast ordered=t ow=t;
+            semiperfectmode=t quickmatch fast ordered=t ow=t {XMX}
         """
 
 rule repair:
@@ -234,7 +258,7 @@ rule repair:
         """   
         repair.sh in={input.unmapped} \
             out={output.r1} out2={output.r2} \
-            ow=t;
+            ow=t {XMX}
         """
 
 rule trim_low_quality:
@@ -254,7 +278,7 @@ rule trim_low_quality:
         bbduk.sh in={input.r1} in2={input.r2} \
             out={output.r1} out2={output.r2} outs={output.singletons} \
             stats={output.stats} \
-            qtrim=r trimq=20 maxns=2 minlength=50 ordered=t ow=t;
+            qtrim=r trimq=20 maxns=2 minlength=50 ordered=t ow=t {XMX}
         """
 
 """
@@ -281,7 +305,7 @@ rule remove_bacteria:
             path={params.bacpath} \
             outm={output.mapped} outu={output.unmapped} \
             scafstats={output.scafstats} \
-            semiperfectmode=t quickmatch fast ordered=t ow=t;
+            semiperfectmode=t quickmatch fast ordered=t ow=t {XMX}
        """
 
 
@@ -290,14 +314,14 @@ rule remove_exact_dups:
     Step 9: Remove exact duplicates
     """
     input:
-        os.path.join(QC, "step_8", "{sample}_R1viral_amb.fastq")
+        os.path.join(QC, "step_8", "{sample}_R1.viral_amb.fastq")
     output:
         os.path.join(QC, "step_9", "{sample}_R1.s9.deduped.out.fastq")
     shell:
         """
         dedupe.sh in={input} \
                 out={output} \
-                ac=f  ow=t {XMX};
+                ac=f  ow=t {XMX}
         """
 
 rule deduplicate:
@@ -313,7 +337,7 @@ rule deduplicate:
         """
         dedupe.sh in={input} \
             csf={output.stats} out={output.fa} \
-            ow=t s=4 rnc=t pbr=t {XMX};
+            ow=t s=4 rnc=t pbr=t {XMX}
         """
 
 rule extract_seq_counts:
@@ -329,7 +353,7 @@ rule extract_seq_counts:
         reformat.sh in={input} out={output} \
             deleteinput=t fastawrap=0 \
             ow=t \
-            {XMX};
+            {XMX}
         """
 
 rule extract_counts:
@@ -400,6 +424,248 @@ rule merge_seq_table:
         resultsdir = directory(RESULTS),
     script:
         "scripts/seqtable_merge.R"
+
+
+
+## mmseqs_pviral_aa.snakefile
+
+"""
+Component to query target amino acid sequence database with reduced (seqtab) clustered sequences from merge_seqtable.sh using mmseqs2
+
+This is based on [mmseqs_pviral_aa.sh](../base/mmseqs_pviral_aa.sh)
+
+
+"""
+
+
+rule convert_seqtable_to_fasta:
+    input:
+        os.path.join(RESULTS, "seqtable.tab2fx")
+    output:
+        os.path.join(RESULTS, "seqtable.fasta")
+    shell:
+        "sed -e 's/^/>/; s/\\t/\\n/' {input} > {output}"
+
+rule create_seqtable_db:
+    input:
+        os.path.join(RESULTS, "seqtable.fasta")
+    output:
+        os.path.join(AA_OUT, "seqtable_query.db")
+    shell:
+        "mmseqs createdb --shuffle 0 --dbtype 0 {input} {output}"
+
+rule seqtable_taxsearch:
+    input:
+        sq = os.path.join(AA_OUT, "seqtable_query.db"),
+        db = os.path.join(PROTPATH, "uniprot_virus_c99.db")
+    output:
+        tr = os.path.join(AA_OUT, "taxonomyResult.dbtype")
+    params:
+        tr = os.path.join(AA_OUT, "taxonomyResult")
+    shell:
+        """
+        mmseqs taxonomy {input.sq} {input.db} {params.tr} $(mktemp -d -p {TMPDIR}) \
+        -a --start-sens 1 --sens-steps 3 -s 7 \
+        --search-type 2 --tax-output-mode 1
+        """
+
+rule seqtable_convert_alignments:
+    input:
+        sq = os.path.join(AA_OUT, "seqtable_query.db"),
+        db = os.path.join(PROTPATH, "uniprot_virus_c99.db"),
+        tr = os.path.join(AA_OUT, "taxonomyResult.dbtype")
+    params:
+        tr = os.path.join(AA_OUT, "taxonomyResult")
+    output:
+        os.path.join(AA_OUT, "aln.m8")
+    shell:
+        """
+        mmseqs convertalis {input.sq} {input.db} {params.tr} {output} \
+        --format-output "query,target,pident,alnlen,mismatch,gapopen,qstart,qend,tstart,tend,evalue,bits,qaln,taln"
+        """
+
+rule seqtable_lca:
+    input:
+        db = os.path.join(PROTPATH, "uniprot_virus_c99.db"),
+        tr = os.path.join(AA_OUT, "taxonomyResult.dbtype")
+    output:
+        os.path.join(AA_OUT, "lca.db.dbtype")
+    params:
+        lc = os.path.join(AA_OUT, "lca.db"),
+        tr = os.path.join(AA_OUT, "taxonomyResult")
+    shell:
+        """
+        mmseqs lca {input.db} {params.tr} {params.lc} --tax-lineage true \
+        --lca-ranks "superkingdom,phylum,class,order,family,genus,species";
+        """
+
+rule seqtable_taxtable_tsv:
+    input:
+        sq = os.path.join(AA_OUT, "seqtable_query.db"),
+        lc = os.path.join(AA_OUT, "lca.db.dbtype")
+    params:
+        lc = os.path.join(AA_OUT, "lca.db")
+    output:
+        os.path.join(AA_OUT, "taxonomyResult.tsv")
+    shell:
+        """
+        mmseqs createtsv {input.sq} {params.lc} {output}
+        """
+
+rule seqtable_create_kraken:
+    input:
+        db = os.path.join(PROTPATH, "uniprot_virus_c99.db"),
+        lc = os.path.join(AA_OUT, "lca.db")
+    output:
+        os.path.join(AA_OUT, "taxonomyResult.report")
+    shell:
+        """
+        mmseqs taxonomyreport {input.db} {input.lc} {output}
+        """
+
+## Adjust taxonomy table and extract viral lineages
+# Extract all (virus + phage) potential viral sequences
+
+rule find_viruses:
+    input:
+        os.path.join(AA_OUT, "taxonomyResult.tsv")
+    output:
+        os.path.join(AA_OUT, "all_viruses_table.tsv")
+    shell:
+        """
+        grep 'Viruses;' {input} | cut -f1,5 | sed 's/phi14:2/phi14_2/g' | \
+                sed 's/;/\\t/g' | \
+                sort -n -k1 > {output}
+        """
+
+# Extract phage viral lineages and generate taxonomy table for import into R as PhyloSeq object
+rule find_phages:
+    input:
+        av = os.path.join(AA_OUT, "all_viruses_table.tsv")
+    output:
+        os.path.join(AA_OUT, "phage_table.tsv")
+    shell:
+        "grep -f {PHAGE_LINEAGES} {input.av} > {output}"
+
+rule find_phage_seqs:
+    input:
+        os.path.join(AA_OUT, "phage_table.tsv")
+    output:
+        os.path.join(AA_OUT, "phage_seqs.list")
+    shell:
+        "cut -f1 {input} > {output}"
+
+rule pull_phage_seqs:
+    input:
+        fa = os.path.join(RESULTS, "seqtable.fasta"),
+        ls = os.path.join(AA_OUT, "phage_seqs.list")
+    output:
+        os.path.join(AA_OUT, "phage_seqs.fasta")
+    shell:
+        """
+        grep --no-group-separator -A 1 -Fwf {input.ls} {input.fa} > {output}
+        """
+
+rule phage_seqs_to_tab:
+    input:
+        os.path.join(AA_OUT, "phage_seqs.fasta")
+    output:
+        os.path.join(AA_OUT, "phage_seqs.tab")
+    shell:
+        """
+        perl -pe 'if (s/^>//) {{chomp; s/$/\t/}}' {input} > {output}
+        """
+
+rule phage_to_tax_table:
+    input:
+        tab = os.path.join(AA_OUT, "phage_seqs.tab"),
+        tsv = os.path.join(AA_OUT, "phage_table.tsv")
+    output:
+        os.path.join(AA_OUT, "phage_tax_table.tsv")
+    shell:
+        """
+        join {input.tab} {input.tsv} | \
+        cut -d ' ' --output-delimiter=$'\t' -f 2-9 | \
+        sed '1isequence\tKingdom\tPhylum\tClass\tOrder\tFamily\tGenus\tSpecies' \
+        > {output}
+        """
+
+# Extract non-phage viral lineages and generate taxonomy table for import into R as PhyloSeq object
+rule find_non_phages:
+    input:
+        av = os.path.join(AA_OUT, "all_viruses_table.tsv")
+    output:
+        os.path.join(AA_OUT, "viruses_table.tsv")
+    shell:
+        "grep -vf {PHAGE_LINEAGES} {input.av} > {output}"
+
+rule find_non_phage_seqs:
+    input:
+        os.path.join(AA_OUT, "viruses_table.tsv")
+    output:
+        os.path.join(AA_OUT, "viruses_seqs.list")
+    shell:
+        "cut -f1 {input} > {output}"
+
+rule pull_non_phage_seqs:
+    input:
+        fa = os.path.join(RESULTS, "seqtable.fasta"),
+        ls = os.path.join(AA_OUT, "viruses_seqs.list")
+    output:
+        os.path.join(AA_OUT, "viruses_seqs.fasta")
+    shell:
+        """
+        grep --no-group-separator -A 1 -Fwf {input.ls} {input.fa} > {output}
+        """
+
+rule non_phage_seqs_to_tab:
+    input:
+        os.path.join(AA_OUT, "viruses_seqs.fasta")
+    output:
+        os.path.join(AA_OUT, "viruses_seqs.tab")
+    shell:
+        """
+        perl -pe 'if (s/^>//) {{chomp; s/$/\t/}}' {input} > {output}
+        """
+
+rule non_phage_to_tax_table:
+    input:
+        tab = os.path.join(AA_OUT, "viruses_seqs.tab"),
+        tsv = os.path.join(AA_OUT, "viruses_table.tsv")
+    output:
+        os.path.join(AA_OUT, "viruses_tax_table.tsv")
+    shell:
+        """
+        join {input.tab} {input.tsv} | \
+        cut -d ' ' --output-delimiter=$'\t' -f 2-9 | \
+        sed '1isequence\tKingdom\tPhylum\tClass\tOrder\tFamily\tGenus\tSpecies' \
+        > {output}
+        """
+
+
+# Extract unclassified lineages
+rule unclassified_lineages:
+    input:
+        os.path.join(AA_OUT, "taxonomyResult.tsv")
+    output:
+        os.path.join(AA_OUT, "pviral_unclassified_seqs.list")
+    shell:
+        """
+        grep -v 'Viruses;' {input} | cut -f1 | \
+                sort -n -k1 > {output}
+        """
+
+rule pull_unclassified_seqs:
+    input:
+        fa = os.path.join(RESULTS, "seqtable.fasta"),
+        ls = os.path.join(AA_OUT, "pviral_unclassified_seqs.list")
+    output:
+        os.path.join(AA_OUT, "unclassified_seqs.fasta")
+    shell:
+        """
+        grep --no-group-separator -A 1 -Fwf {input.ls} {input.fa} > {output}
+        """
+
 
 
 
