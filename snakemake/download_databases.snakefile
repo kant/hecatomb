@@ -44,6 +44,7 @@ rule all:
         # the database directories
         os.path.join(BACPATH, "ref"),
         os.path.join(HOSTPATH, "ref"),
+        os.path.join(CONPATH, "line_sine.db"),
         os.path.join(PROTPATH, "uniprot_virus.faa"),
         os.path.join(TAXPATH, "uniprot_ncbi_mapping.dat"),
         multiext(os.path.join(PROTPATH, "uniprot_virus_c99"), ".db_mapping", ".db_names.dmp", ".db_nodes.dmp", ".db_merged.dmp", ".db_delnodes.dmp"),
@@ -202,7 +203,7 @@ rule uniref_plus_viruses:
         ur = os.path.join(PROTPATH, "uniref50.fasta.gz"),
         vr = os.path.join(PROTPATH, "uniprot_virus_c99.faa"),
     output:
-        os.path.join(URVPATH, "uniref50_virus.fasta") 
+        temp(os.path.join(URVPATH, "uniref50_virus.fasta"))
     shell:
         """
         unpigz -c {input.ur} | cat - {input.vr} > {output}
@@ -230,4 +231,20 @@ rule mmseqs_urv_taxonomy:
         mmseqs createtaxdb --ncbi-tax-dump {params.tax} --tax-mapping-file {input.idm} {input.vdb} $(mktemp -d -p {TMPDIR})
         """
 
+rule line_sine_download:
+    output:
+        os.path.join(CONPATH, "line_sine.fasta")
+    shell:
+        """
+        curl -L http://sines.eimb.ru/banks/SINEs.bnk > {output} && \
+        curl -L http://sines.eimb.ru/banks/LINEs.bnk >> {output}
+        """
 
+rule line_sine_database:
+    input:
+        os.path.join(CONPATH, "line_sine.fasta")
+    output:
+        os.path.join(CONPATH, "line_sine.db")
+    shell:
+        "mmseqs createdb {input} {output}"
+    
