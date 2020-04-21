@@ -95,7 +95,8 @@ rule viral_seqs_tax_search:
     input:
         vqdb = os.path.join(AA_OUT_CHECKED, "viral_seqs_queryDB"),
     output:
-        os.path.join(AA_OUT_CHECKED, "taxonomyResult.dbtype")
+        os.path.join(AA_OUT_CHECKED, "taxonomyResult.dbtype"),
+        os.path.join(AA_OUT_CHECKED, "taxonomyResult.index")
     params:
         tr = os.path.join(AA_OUT_CHECKED, "taxonomyResult")
     shell:
@@ -129,7 +130,7 @@ rule viral_seqs_lca:
         os.path.join(AA_OUT_CHECKED, "lca.db")
     shell:
         """
-        mmseqs lca {UVRDB} {params.tr} {output} \
+        mmseqs lca {URVDB} {params.tr} {output} \
         --tax-lineage true \
         --lca-ranks "superkingdom,phylum,class,order,family,genus,species"
         """
@@ -140,7 +141,8 @@ rule extract_top_hit:
     params:
         tr = os.path.join(AA_OUT_CHECKED, "taxonomyResult")
     output:
-        os.path.join(AA_OUT_CHECKED, "taxonomyResult.firsthit")
+        os.path.join(AA_OUT_CHECKED, "taxonomyResult.firsthit.dbtype"),
+        os.path.join(AA_OUT_CHECKED, "taxonomyResult.firsthit.index")
     shell:
         """
         mmseqs filterdb {params.tr} {output} --extract-lines 1
@@ -149,12 +151,14 @@ rule extract_top_hit:
 rule convertalis_vsqd:
     input:
         vqdb = os.path.join(AA_OUT_CHECKED, "viral_seqs_queryDB"),
-        trfh = os.path.join(AA_OUT_CHECKED, "taxonomyResult.firsthit")
+        trfhdb = os.path.join(AA_OUT_CHECKED, "taxonomyResult.firsthit.dbtype")
     output:
         os.path.join(AA_OUT_CHECKED, "taxonomyResult.firsthit.m8")
+    params:
+        trfh = os.path.join(AA_OUT_CHECKED, "taxonomyResult.firsthit")
     shell:
         """
-        mmseqs convertalis {input.vqdb} {URVDB} {input.trfh} {output} 
+        mmseqs convertalis {input.vqdb} {URVDB} {params.trfh} {output} 
         """
 
 rule create_taxtable_vsqd:
