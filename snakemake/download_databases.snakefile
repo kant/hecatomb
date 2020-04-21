@@ -44,7 +44,7 @@ rule all:
         # the database directories
         os.path.join(BACPATH, "ref"),
         os.path.join(HOSTPATH, "ref"),
-        os.path.join(CONPATH, "line_sine.db"),
+        os.path.join(CONPATH, "line_sine.fasta"),
         os.path.join(PROTPATH, "uniprot_virus.faa"),
         os.path.join(TAXPATH, "uniprot_ncbi_mapping.dat"),
         multiext(os.path.join(PROTPATH, "uniprot_virus_c99"), ".db_mapping", ".db_names.dmp", ".db_nodes.dmp", ".db_merged.dmp", ".db_delnodes.dmp"),
@@ -232,6 +232,10 @@ rule mmseqs_urv_taxonomy:
         """
 
 rule line_sine_download:
+    """
+    A database of LINES and SINES that we screen against to 
+    remove contaminants.
+    """
     output:
         os.path.join(CONPATH, "line_sine.fasta")
     shell:
@@ -240,11 +244,3 @@ rule line_sine_download:
         curl -L http://sines.eimb.ru/banks/LINEs.bnk >> {output}
         """
 
-rule line_sine_database:
-    input:
-        os.path.join(CONPATH, "line_sine.fasta")
-    output:
-        os.path.join(CONPATH, "line_sine.db")
-    shell:
-        "mmseqs createdb {input} {output}"
-    

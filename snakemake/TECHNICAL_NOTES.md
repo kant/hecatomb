@@ -7,6 +7,8 @@ In implementing `hecatomb` we had to make several design decisions. We keep trac
 
 We decided to abstract out downloading the databases. This is very often a time-consuming task and we appreciate the unstable network connections make this tricky. We [have described](../databases) how to build the databases without using `snakemake`, but of course provide that as a pipeline too.
 
+We separately remove the LINEs and SINEs from the sequences. The human genome we used is masked to remove those elements (and other viral elements), and so we have a separate screen for LINEs and SINEs. This puts those hits in a separate fastq file and so you can explore them if your virus has a SINE element (for example, the [BeAn 58058 poxvirus](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5334577/) has a SINE element.)
+
 # Snakemake
 
 We chose to use [snakemake](https://snakemake.readthedocs.io/) over other workflow managers largely because of our extensive experience with it. However, there is no reason you could not implement `hecatomb` in nextflow or any one of the other workflow managers.
