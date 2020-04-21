@@ -47,7 +47,7 @@ if not os.path.exists(AA_OUT):
 
 AA_OUT_CHECKED  = os.path.join(RESULTS, "mmseqs_aa_checked_out")
 if not os.path.exists(AA_OUT_CHECKED):
-    os.mkdir(AA_OUT_CHECKED)
+    os.makedirs(AA_OUT_CHECKED, exist_ok=True)
 
 VIRDB = os.path.join(PROTPATH, "uniprot_virus_c99.db")
 if not os.path.exists(VIRDB):
