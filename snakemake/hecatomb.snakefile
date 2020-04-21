@@ -46,6 +46,10 @@ AA_OUT  = os.path.join(RESULTS, "mmseqs_aa_out")
 if not os.path.exists(AA_OUT):
     os.makedirs(AA_OUT, exist_ok=True)
 
+AA_OUT_CHECKED  = os.path.join(RESULTS, "mmseqs_aa_checked_out")
+if not os.path.exists(AA_OUT_CHECKED):
+    os.mkdir(AA_OUT_CHECKED)
+
 VIRDB = os.path.join(PROTPATH, "uniprot_virus_c99.db")
 if not os.path.exists(VIRDB):
     sys.stderr.write(f"FATAL: {VIRDB} does not exist. Please ensure you")
@@ -59,6 +63,15 @@ if not os.path.exists(PHAGE_LINEAGES):
     sys.stderr.write("you have the latest version of the databases\n")
     sys.exit()
 
+# uniref50 + viruses
+URVPATH = os.path.join(PROTPATH, "uniref_plus_virus")
+URVDB = os.path.join(URVPATH, "uniref50_virus.db") # uniref50 + viruses database
+if not os.path.exists(URVDB):
+    sys.stderr.write("FATAL: {URVDB} not found.\n")
+    sys.stderr.write("Please make sure that you have run ")
+    sys.stderr.write("download_databases.snakefile before commencing\n")
+    sys.exit()
+
 
 # how much memory we have
 XMX = config['System']['Memory']
@@ -67,33 +80,25 @@ SAMPLES, = glob_wildcards(os.path.join(READDIR, '{sample}_R1.fastq.gz'))
 PATTERN_R1 = '{sample}_R1'
 PATTERN_R2 = '{sample}_R2'
 
-# Summary:
-	# Step 0: Clumpify reads (https://jgi.doe.gov/data-and-tools/bbtools/bb-tools-user-guide/clumpify-guide/)
-	# Step 1: Remove 5' amplification primer
-	# Step 2: Remove 3' read through contaminant (Reverse complement of amplification primer + 6 bases of the adapter)
-	# Step 3: Remove primer free adapter (both orientations)
-	# Step 4: Remove adapter free primer (both orientations)
-	# Step 5: PhiX Removal and vector contamination removal
-	# Step 6: Host-removal
-	# Step 7: Trim low-quality bases
-	# Step 9: Remove bacterial contaminants reserving viral and aambiguous sequences
-    # Step 10: Remove exact duplicates
-    # Step 11: Dereplicate
-    # Step 12: Extract sequences and counts for seqtable (count table)
-    # Step 13. Parse and combine stats into a seqeunce count table
 
 rule all:
     input:
         os.path.join(AA_OUT, "phage_tax_table.tsv"),
         os.path.join(AA_OUT, "viruses_tax_table.tsv"),
-        os.path.join(AA_OUT, "unclassified_seqs.fasta")
+        os.path.join(AA_OUT, "unclassified_seqs.fasta"),
+        os.path.join(AA_OUT_CHECKED, "taxonomyResult.firsthit.m8"),
+        os.path.join(AA_OUT_CHECKED, "taxonomyResult.report"),
+        os.path.join(AA_OUT_CHECKED, "viruses_checked_aa_table.tsv"),
+        os.path.join(AA_OUT_CHECKED, "viruses_checked_aa_tax_table.tsv"),
+        os.path.join(AA_OUT_CHECKED, "unclassified_checked_aa_seqs.fasta")
 
 
 
 """
-Process the data. 
+Clean the data.
 
-These are the steps to do the work!
+This is from contaminant_removal.snakefile
+
 """
 
 
@@ -327,6 +332,15 @@ rule remove_bacteria:
        """
 
 
+"""
+End the contaminant_removal.snakefile
+
+
+
+This section is from cluster_count.snakefile and counts all the clusters!
+"""
+
+
 rule remove_exact_dups:
     """
     Step 9: Remove exact duplicates
@@ -445,13 +459,11 @@ rule merge_seq_table:
 
 
 
-## mmseqs_pviral_aa.snakefile
 
 """
-Component to query target amino acid sequence database with reduced (seqtab) clustered sequences from merge_seqtable.sh using mmseqs2
+End cluster_count.snakefile
 
-This is based on [mmseqs_pviral_aa.sh](../base/mmseqs_pviral_aa.sh)
-
+This section is from  mmseqs_pviral_aa.snakefile
 
 """
 
@@ -686,4 +698,211 @@ rule pull_unclassified_seqs:
 
 
 
+"""
+This section is from mmseqs_pviral_aa_check.snakefile
 
+Based upon ../base/mmseqs_pviral_aa_check.sh
+
+Rob Edwards, April 2020
+
+"""
+
+
+
+rule create_viral_seqs_db:
+    input:
+        os.path.join(AA_OUT, "viruses_seqs.fasta")
+    output:
+        os.path.join(AA_OUT_CHECKED, "viral_seqs_queryDB")
+    shell:
+        """
+        mmseqs createdb {input} {output} --shuffle 0 --dbtype 0
+        """
+
+rule viral_seqs_tax_search:
+    """
+    The taxnomy result maybe several disjoint files
+    """
+    input:
+        vqdb = os.path.join(AA_OUT_CHECKED, "viral_seqs_queryDB"),
+    output:
+        os.path.join(AA_OUT_CHECKED, "taxonomyResult.dbtype"),
+        os.path.join(AA_OUT_CHECKED, "taxonomyResult.index")
+    params:
+        tr = os.path.join(AA_OUT_CHECKED, "taxonomyResult")
+    shell:
+        """
+        mmseqs taxonomy {input.vqdb} {URVDB} {params.tr} \
+            $(mktemp -d -p {TMPDIR}) \
+            -a -s 7 --search-type 2 --tax-output-mode 1
+        """
+
+rule viral_seqs_convertalis:
+    input:
+        vqdb = os.path.join(AA_OUT_CHECKED, "viral_seqs_queryDB"),
+        tr = os.path.join(AA_OUT_CHECKED, "taxonomyResult.dbtype")
+    params:
+        tr = os.path.join(AA_OUT_CHECKED, "taxonomyResult")
+    output:
+        os.path.join(AA_OUT_CHECKED, "aln.m8")
+    shell:
+        """
+        mmseqs convertalis {input.vqdb} {URVDB} {params.tr} {output} \
+        --format-output "query,target,pident,alnlen,mismatch,gapopen,qstart,qend,tstart,tend,evalue,bits,qaln,taln"
+        """
+
+rule viral_seqs_lca:
+    input:
+        vqdb = os.path.join(AA_OUT_CHECKED, "viral_seqs_queryDB"),
+        tr = os.path.join(AA_OUT_CHECKED, "taxonomyResult.dbtype")
+    params:
+        tr = os.path.join(AA_OUT_CHECKED, "taxonomyResult")
+    output:
+        os.path.join(AA_OUT_CHECKED, "lca.db.dbtype"),
+        os.path.join(AA_OUT_CHECKED, "lca.db.index")
+    shell:
+        """
+        mmseqs lca {URVDB} {params.tr} {output} \
+        --tax-lineage true \
+        --lca-ranks "superkingdom,phylum,class,order,family,genus,species"
+        """
+
+rule extract_top_hit:
+    input:
+        os.path.join(AA_OUT_CHECKED, "taxonomyResult.dbtype")
+    params:
+        tr = os.path.join(AA_OUT_CHECKED, "taxonomyResult")
+    output:
+        os.path.join(AA_OUT_CHECKED, "taxonomyResult.firsthit.dbtype"),
+        os.path.join(AA_OUT_CHECKED, "taxonomyResult.firsthit.index")
+    shell:
+        """
+        mmseqs filterdb {params.tr} {output} --extract-lines 1
+        """
+
+rule convertalis_vsqd:
+    input:
+        vqdb = os.path.join(AA_OUT_CHECKED, "viral_seqs_queryDB"),
+        trfhdb = os.path.join(AA_OUT_CHECKED, "taxonomyResult.firsthit.dbtype")
+    output:
+        os.path.join(AA_OUT_CHECKED, "taxonomyResult.firsthit.m8")
+    params:
+        trfh = os.path.join(AA_OUT_CHECKED, "taxonomyResult.firsthit")
+    shell:
+        """
+        mmseqs convertalis {input.vqdb} {URVDB} {params.trfh} {output} 
+        """
+
+rule create_taxtable_vsqd:
+    input:
+        vqdb = os.path.join(AA_OUT_CHECKED, "viral_seqs_queryDB"),
+        lcadb = os.path.join(AA_OUT_CHECKED, "lca.db.dbtype")
+    params:
+        lcadb = os.path.join(AA_OUT_CHECKED, "lca.db")
+    output:
+        os.path.join(AA_OUT_CHECKED, "taxonomyResult.tsv")
+    shell:
+        """
+        mmseqs createtsv {input.vqdb} {params.lcadb} {output}
+        """
+
+rule create_kraken_vsqd:
+    input:
+        lcadb = os.path.join(AA_OUT_CHECKED, "lca.db.dbtype")
+    params:
+        lcadb = os.path.join(AA_OUT_CHECKED, "lca.db")
+    output:
+        os.path.join(AA_OUT_CHECKED, "taxonomyResult.report")
+    shell:
+        """
+        mmseqs taxonomyreport {URVDB} {params.lcadb} {output}
+        """
+
+rule nonphages_to_pyloseq_table:
+    input:
+        os.path.join(AA_OUT_CHECKED, "taxonomyResult.tsv")
+    output:
+        os.path.join(AA_OUT_CHECKED, "viruses_checked_aa_table.tsv")
+    shell:
+        """
+        grep -v 'Bacteria;' {input} | \
+            grep 'Viruses;' | \
+            grep -v -f  {PHAGE_LINEAGES} | cut -f1,5 | \
+            sed 's/:/\t/g' | \
+                sort -n -k1 > {output}
+        """
+
+rule nonphages_to_pyloseq_list:
+    input:
+        os.path.join(AA_OUT_CHECKED, "viruses_checked_aa_table.tsv")
+    output:
+        os.path.join(AA_OUT_CHECKED, "viruses_checked_aa_seqs.list")
+    shell:
+        """
+        cut -f1 {input} > {output}
+        """
+
+rule pull_nonphage_seqs:
+    input:
+        fa = os.path.join(RESULTS, "seqtable.fasta"),
+        ls = os.path.join(AA_OUT_CHECKED, "viruses_checked_aa_seqs.list")
+    output:
+        os.path.join(AA_OUT_CHECKED, "viruses_checked_aa_seqs.fasta")
+    shell:
+        """
+        grep --no-group-separator -A 1 -Fwf {input.ls} {input.fa} > {output}
+        """
+
+rule nonphage_seqs_to_tab:
+    input:
+        os.path.join(AA_OUT_CHECKED, "viruses_checked_aa_seqs.fasta")
+    output:
+        os.path.join(AA_OUT_CHECKED, "viruses_checked_aa_seqs.tab")
+    shell:
+        """
+        perl -pe 'if (s/^>//) {{chomp; s/$/\t/}}' {input} > {output}
+        """
+
+rule nonphage_to_tax_table:
+    input:
+        tab = os.path.join(AA_OUT_CHECKED, "viruses_checked_aa_seqs.tab"),
+        tsv = os.path.join(AA_OUT_CHECKED, "viruses_checked_aa_table.tsv")
+    output:
+        os.path.join(AA_OUT_CHECKED, "viruses_checked_aa_tax_table.tsv")
+    shell:
+        """
+        join {input.tab} {input.tsv} | \
+        cut -d ' ' --output-delimiter=$'\t' -f 2-9 | \
+        sed '1isequence\tKingdom\tPhylum\tClass\tOrder\tFamily\tGenus\tSpecies' \
+        > {output}
+        """
+
+rule non_viral_lineages:
+    input:
+        os.path.join(AA_OUT_CHECKED, "taxonomyResult.tsv")
+    output:
+        os.path.join(AA_OUT_CHECKED, "unclassified_checked_aa_seqs.list")
+    shell:
+        """
+        grep -v 'Viruses;' {input} | cut -f1 | \
+           sort -n -k1 > {output}
+        """
+ 
+rule pull_non_viral_lineages:
+    input:
+        fa = os.path.join(RESULTS, "seqtable.fasta"),
+        ls = os.path.join(AA_OUT_CHECKED, "unclassified_checked_aa_seqs.list")
+    output:
+        os.path.join(AA_OUT_CHECKED, "unclassified_checked_aa_seqs.fasta")
+    shell:
+        """
+        grep --no-group-separator -A 1 -Fwf {input.ls} {input.fa} > {output}
+        """
+
+
+
+"""
+
+End the code from mmseqs_pviral_aa_check.snakefile
+
+"""
