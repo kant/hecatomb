@@ -245,7 +245,6 @@ rule host_removal:
             semiperfectmode=t quickmatch fast ordered=t ow=t {XMX}
         """
 
-
 rule line_sine_removal:
     """
     Step 6a. Remove any LINES and SINES in the sequences.
@@ -263,7 +262,6 @@ rule line_sine_removal:
           outm={output.mapped} \
           ref={input.linesine} k=31 hdist=1 stats={output.stats}
         """
-
 
 rule repair:
     """
