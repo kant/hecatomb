@@ -8,7 +8,6 @@ Rob Edwards, Jan 2020
 
 import os
 import sys
-import socket
 
 if not config:
     sys.stderr.write("FATAL: Please define a config file using the --configfile command line option.\n")
