@@ -127,7 +127,8 @@ rule viral_seqs_lca:
     params:
         tr = os.path.join(AA_OUT_CHECKED, "taxonomyResult")
     output:
-        os.path.join(AA_OUT_CHECKED, "lca.db")
+        os.path.join(AA_OUT_CHECKED, "lca.db.dbtype"),
+        os.path.join(AA_OUT_CHECKED, "lca.db.index")
     shell:
         """
         mmseqs lca {URVDB} {params.tr} {output} \
@@ -164,22 +165,26 @@ rule convertalis_vsqd:
 rule create_taxtable_vsqd:
     input:
         vqdb = os.path.join(AA_OUT_CHECKED, "viral_seqs_queryDB"),
+        lcadb = os.path.join(AA_OUT_CHECKED, "lca.db.dbtype")
+    params:
         lcadb = os.path.join(AA_OUT_CHECKED, "lca.db")
     output:
         os.path.join(AA_OUT_CHECKED, "taxonomyResult.tsv")
     shell:
         """
-        mmseqs createtsv {input.vqdb} {input.lcadb} {output}
+        mmseqs createtsv {input.vqdb} {params.lcadb} {output}
         """
 
 rule create_kraken_vsqd:
     input:
-        os.path.join(AA_OUT_CHECKED, "lca.db")
+        lcadb = os.path.join(AA_OUT_CHECKED, "lca.db.dbtype")
+    params:
+        lcadb = os.path.join(AA_OUT_CHECKED, "lca.db")
     output:
         os.path.join(AA_OUT_CHECKED, "taxonomyResult.report")
     shell:
         """
-        mmseqs taxonomyreport {URVDB} {input} {output}
+        mmseqs taxonomyreport {URVDB} {params.lcadb} {output}
         """
 
 rule nonphages_to_pyloseq_table:
@@ -189,9 +194,9 @@ rule nonphages_to_pyloseq_table:
         os.path.join(AA_OUT_CHECKED, "viruses_checked_aa_table.tsv")
     shell:
         """
-        grep -v 'Bacteria:' {input} | \
-            grep 'Viruses:' | \
-            grep -v -f $PHAGE | cut -f1,5 | \
+        grep -v 'Bacteria;' {input} | \
+            grep 'Viruses;' | \
+            grep -v -f  {PHAGE_LINEAGES} | cut -f1,5 | \
             sed 's/:/\t/g' | \
                 sort -n -k1 > {output}
         """
