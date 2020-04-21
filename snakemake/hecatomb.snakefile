@@ -84,7 +84,7 @@ rule all:
     input:
         os.path.join(AA_OUT, "phage_tax_table.tsv"),
         os.path.join(AA_OUT, "viruses_tax_table.tsv"),
-        os.path.join(AA_OUT, "unclassified_seqs.fasta"),
+        os.path.join(AA_OUT, "pviral_aa_unclassified_seqs.fasta"),
         os.path.join(AA_OUT_CHECKED, "taxonomyResult.firsthit.m8"),
         os.path.join(AA_OUT_CHECKED, "taxonomyResult.report"),
         os.path.join(AA_OUT_CHECKED, "viruses_checked_aa_table.tsv"),
@@ -689,7 +689,7 @@ rule pull_unclassified_seqs:
         fa = os.path.join(RESULTS, "seqtable.fasta"),
         ls = os.path.join(AA_OUT, "pviral_unclassified_seqs.list")
     output:
-        os.path.join(AA_OUT, "unclassified_seqs.fasta")
+        os.path.join(AA_OUT, "pviral_aa_unclassified_seqs.fasta")
     shell:
         """
         grep --no-group-separator -A 1 -Fwf {input.ls} {input.fa} > {output}
