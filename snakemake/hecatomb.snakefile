@@ -233,8 +233,8 @@ rule host_removal:
         r2 = os.path.join(QC, "step_5", PATTERN_R2 + ".s5.out.fastq"),
         refpath = os.path.join(HOSTPATH, "ref")
     output:
-        unmapped = os.path.join(QC, "step_6", "{sample}.unmapped.s6.out.fastq"),
-        mapped = os.path.join(QC, "step_6", "{sample}.hostmapped.s6.out.fastq")
+        unmapped = os.path.join(QC, "step_6", "{sample}.host.unmapped.s6.out.fastq"),
+        mapped = os.path.join(QC, "step_6", "{sample}.host.mapped.s6.out.fastq")
     params:
         hostpath = HOSTPATH 
     shell:
@@ -245,12 +245,32 @@ rule host_removal:
             semiperfectmode=t quickmatch fast ordered=t ow=t {XMX}
         """
 
+
+rule line_sine_removal:
+    """
+    Step 6a. Remove any LINES and SINES in the sequences.
+    """
+    input:
+        unmapped = os.path.join(QC, "step_6", "{sample}.unmapped.s6.out.fastq"),
+        linesine = os.path.join(CONPATH, "line_sine.fasta")
+    output:
+        unmapped = os.path.join(QC, "step_6", "{sample}.linesine.unmapped.s6.out.fastq"),
+        mapped   = os.path.join(QC, "step_6", "{sample}.linesine.mapped.s6.out.fastq")
+        stats    = os.path.join(QC, "step_6", "{sample}.linesine.stats")
+    shell:
+        """
+        bbduk.sh in={input.unmapped} out={output.unmapped} \
+          outm={output.mapped} \
+          ref={input.linesine} k=31 hdist=1 stats={output.stats}
+        """
+
+
 rule repair:
     """
     Step 6b. Repair the paired ends
     """
     input:
-        unmapped = os.path.join(QC, "step_6", "{sample}.unmapped.s6.out.fastq"),
+        unmapped = os.path.join(QC, "step_6", "{sample}.linesine.unmapped.s6.out.fastq")
     output:
         r1 = os.path.join(QC, "step_6", PATTERN_R1 + ".s6.out.fastq"),
         r2 = os.path.join(QC, "step_6", PATTERN_R2 + ".s6.out.fastq")
