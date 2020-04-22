@@ -486,14 +486,13 @@ rule create_seqtable_db:
 rule seqtable_taxsearch:
     input:
         sq = os.path.join(AA_OUT, "seqtable_query.db"),
-        db = os.path.join(PROTPATH, "uniprot_virus_c99.db")
     output:
         tr = os.path.join(AA_OUT, "taxonomyResult.dbtype")
     params:
         tr = os.path.join(AA_OUT, "taxonomyResult")
     shell:
         """
-        mmseqs taxonomy {input.sq} {input.db} {params.tr} $(mktemp -d -p {TMPDIR}) \
+        mmseqs taxonomy {input.sq} {VIRDB} {params.tr} $(mktemp -d -p {TMPDIR}) \
         -a --start-sens 1 --sens-steps 3 -s 7 \
         --search-type 2 --tax-output-mode 1
         """
@@ -501,7 +500,6 @@ rule seqtable_taxsearch:
 rule seqtable_convert_alignments:
     input:
         sq = os.path.join(AA_OUT, "seqtable_query.db"),
-        db = os.path.join(PROTPATH, "uniprot_virus_c99.db"),
         tr = os.path.join(AA_OUT, "taxonomyResult.dbtype")
     params:
         tr = os.path.join(AA_OUT, "taxonomyResult")
@@ -509,13 +507,12 @@ rule seqtable_convert_alignments:
         os.path.join(AA_OUT, "aln.m8")
     shell:
         """
-        mmseqs convertalis {input.sq} {input.db} {params.tr} {output} \
+        mmseqs convertalis {input.sq} {VIRDB} {params.tr} {output} \
         --format-output "query,target,pident,alnlen,mismatch,gapopen,qstart,qend,tstart,tend,evalue,bits,qaln,taln"
         """
 
 rule seqtable_lca:
     input:
-        db = os.path.join(PROTPATH, "uniprot_virus_c99.db"),
         tr = os.path.join(AA_OUT, "taxonomyResult.dbtype")
     output:
         os.path.join(AA_OUT, "lca.db.dbtype")
@@ -524,7 +521,7 @@ rule seqtable_lca:
         tr = os.path.join(AA_OUT, "taxonomyResult")
     shell:
         """
-        mmseqs lca {input.db} {params.tr} {params.lc} --tax-lineage true \
+        mmseqs lca {VIRDB} {params.tr} {params.lc} --tax-lineage true \
         --lca-ranks "superkingdom,phylum,class,order,family,genus,species";
         """
 
@@ -543,13 +540,12 @@ rule seqtable_taxtable_tsv:
 
 rule seqtable_create_kraken:
     input:
-        db = os.path.join(PROTPATH, "uniprot_virus_c99.db"),
         lc = os.path.join(AA_OUT, "lca.db")
     output:
         os.path.join(AA_OUT, "taxonomyResult.report")
     shell:
         """
-        mmseqs taxonomyreport {input.db} {input.lc} {output}
+        mmseqs taxonomyreport {VIRDB} {input.lc} {output}
         """
 
 ## Adjust taxonomy table and extract viral lineages
