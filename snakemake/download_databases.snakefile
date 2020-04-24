@@ -27,6 +27,7 @@ HOSTPATH = os.path.join(DBDIR, "human_masked")
 CONPATH  = os.path.join(DBDIR, "contaminants")
 PROTPATH = os.path.join(DBDIR, "proteins")
 TAXPATH  = os.path.join(DBDIR, "taxonomy")
+NUCLPATH = os.path.join(DBDIR, "nucleotide")
 
 # these are just derivied from above
 URVPATH = os.path.join(PROTPATH, "uniref_plus_virus") # uniref50 + viruses
@@ -37,6 +38,7 @@ id_mapping_url    = "https://ftp.expasy.org/databases/uniprot/current_release/kn
 hecatomb_db_url   = "https://edwards.sdsu.edu/CERVAID/databases/hecatomb.databases.tar.bz2"
 taxdump_url       = "ftp://ftp.ncbi.nih.gov/pub/taxonomy/taxdump.tar.gz"
 uniprot_virus_url = "https://www.uniprot.org/uniprot/?query=taxonomy:%22Viruses%20[10239]%22&format=fasta&&sort=score&fil=reviewed:no"
+ntacc2tax         = "ftp://ftp.ncbi.nlm.nih.gov/pub/taxonomy/accession2taxid/nucl_gb.accession2taxid.gz"
 
 
 rule all:
@@ -155,17 +157,34 @@ rule extract_ncbi_taxonomy:
     params:
         path = TAXPATH
     output:
-        os.path.join(TAXPATH, "citations.dmp"),
-        os.path.join(TAXPATH, "delnodes.dmp"),
-        os.path.join(TAXPATH, "division.dmp"),
-        os.path.join(TAXPATH, "gc.prt"),
-        os.path.join(TAXPATH, "gencode.dmp"),
-        os.path.join(TAXPATH, "merged.dmp"),
+        temp(os.path.join(TAXPATH, "citations.dmp")),
+        temp(os.path.join(TAXPATH, "delnodes.dmp")),
+        temp(os.path.join(TAXPATH, "division.dmp")),
+        temp(os.path.join(TAXPATH, "gc.prt")),
+        temp(os.path.join(TAXPATH, "gencode.dmp")),
+        temp(os.path.join(TAXPATH, "merged.dmp")),
+        temp(os.path.join(TAXPATH, "readme.txt")),
         os.path.join(TAXPATH, "names.dmp"),
         os.path.join(TAXPATH, "nodes.dmp"),
-        os.path.join(TAXPATH, "readme.txt")
     shell:
         "cd {params.path} && tar xf taxdump.tar.gz"
+
+rule download_accession_to_tax:
+    output:
+        os.path.join(TAXPATH, "nucl_gb.accession2taxid.gz")
+    shell:
+        """
+        cd {TAXPATH};
+        curl -LO {ntacc2tax};
+        """
+
+rule extract_accession_to_tax:
+    input:
+        os.path.join(TAXPATH, "nucl_gb.accession2taxid.gz")
+    output:
+        os.path.join(TAXPATH, "nucl_gb.accession2taxid")
+    shell:
+        "unpigz {input}"
 
 rule cluster_uniprot:
     input:
@@ -230,6 +249,34 @@ rule mmseqs_urv_taxonomy:
         """
         mmseqs createtaxdb --ncbi-tax-dump {params.tax} --tax-mapping-file {input.idm} {input.vdb} $(mktemp -d -p {TMPDIR})
         """
+
+rule mmseqs_nt_db:
+    input:
+        nt = os.path.join(NUCLPATH, "nt.fna")
+    output:
+        idx = os.path.join(NUCLPATH, "ntDB.index"),
+        dbt = os.path.join(NUCLPATH, "ntDB.dbtype")
+    params:
+        db = os.path.join(NUCLPATH, "ntDB")
+    shell:
+        """
+        mmseqs createdb {input} {params.db} --dbtype 2 --shuffle 0
+        """
+
+rule nt_taxonomy_file:
+    """
+    Now we download the accession to taxonomy 
+    """
+    input:
+        nt = os.path.join(NUCLPATH, "nt.fna")
+    output:
+        tx = os.path.join(NUCLPATH, "nt.tax")
+    shell:
+        """
+
+        epost -db nuccore | esummary -db nuccore | xtract -pattern DocumentSummary -element AccessionVersion TaxId
+
+
 
 rule line_sine_download:
     """
