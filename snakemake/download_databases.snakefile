@@ -115,20 +115,24 @@ rule download_uniprot_viruses:
         os.path.join(PROTPATH, "uniprot_virus.faa")
     shell:
         """
-        mkdir -p {PROTPATH} && curl -Lo {output} {uniprot_virus_url}"
+        mkdir -p {PROTPATH} && curl -Lo {output} "{uniprot_virus_url}"
         """
 
 rule download_uniref50:
     output:
         os.path.join(PROTPATH, "uniref50.fasta.gz")
     shell:
-        "mkdir -p {PROTPATH} && curl -Lo {output} ftp://ftp.uniprot.org/pub/databases/uniprot/uniref/uniref50/uniref50.fasta.gz"
+        """
+        mkdir -p {PROTPATH} && curl -Lo {output} "ftp://ftp.uniprot.org/pub/databases/uniprot/uniref/uniref50/uniref50.fasta.gz"
+        """
 
 rule download_ncbi_taxonomy:
     output:
         os.path.join(TAXPATH, "taxdump.tar.gz")
     shell:
-        "curl -Lo {output} {taxdump_url}"
+        """
+        curl -Lo {output} "{taxdump_url}"
+        """
 
 
 rule download_id_taxonomy_mapping:
@@ -137,7 +141,7 @@ rule download_id_taxonomy_mapping:
     shell:
         """
         cd {TAXPATH};
-        curl -LO {id_mapping_url}
+        curl -LO "{id_mapping_url}"
         """
 
 
@@ -175,7 +179,7 @@ rule download_accession_to_tax:
     shell:
         """
         cd {TAXPATH};
-        curl -LO {ntacc2tax};
+        curl -LO "{ntacc2tax}"
         """
 
 rule extract_accession_to_tax:
@@ -185,6 +189,19 @@ rule extract_accession_to_tax:
         os.path.join(TAXPATH, "nucl_gb.accession2taxid")
     shell:
         "unpigz {input}"
+
+rule create_nt_tax_table:
+    input:
+        nt = os.path.join(NUCLPATH, "nt.fna"),
+        tx = os.path.join(TAXPATH, "nucl_gb.accession2taxid")
+    output:
+        tx = os.path.join(NUCLPATH, "nt.tax")
+    shell:
+        """
+        grep '^>' {input.nt} | cut -f 1 -d ' ' | sed -e 's/^>//' | \
+        xargs -n 10 | sed -e 's/ /|/g' | \
+        xargs -i egrep {} {input.tx} | cut -f 2,3 > {output.tx}
+        """
 
 rule cluster_uniprot:
     input:
@@ -262,21 +279,6 @@ rule mmseqs_nt_db:
         """
         mmseqs createdb {input} {params.db} --dbtype 2 --shuffle 0
         """
-
-rule nt_taxonomy_file:
-    """
-    Now we download the accession to taxonomy 
-    """
-    input:
-        nt = os.path.join(NUCLPATH, "nt.fna")
-    output:
-        tx = os.path.join(NUCLPATH, "nt.tax")
-    shell:
-        """
-
-        epost -db nuccore | esummary -db nuccore | xtract -pattern DocumentSummary -element AccessionVersion TaxId
-
-
 
 rule line_sine_download:
     """
