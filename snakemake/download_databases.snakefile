@@ -115,7 +115,7 @@ rule download_uniprot_viruses:
         os.path.join(PROTPATH, "uniprot_virus.faa")
     shell:
         """
-        mkdir -p {PROTPATH} && curl -Lo {output} "{uniprot_virus_url}"
+        mkdir -p {PROTPATH} && curl -Lo {output} '{uniprot_virus_url}'
         """
 
 rule download_uniref50:
@@ -168,8 +168,8 @@ rule extract_ncbi_taxonomy:
         temp(os.path.join(TAXPATH, "gencode.dmp")),
         temp(os.path.join(TAXPATH, "merged.dmp")),
         temp(os.path.join(TAXPATH, "readme.txt")),
-        os.path.join(TAXPATH, "names.dmp"),
-        os.path.join(TAXPATH, "nodes.dmp"),
+        temp(os.path.join(TAXPATH, "names.dmp")),
+        temp(os.path.join(TAXPATH, "nodes.dmp")),
     shell:
         "cd {params.path} && tar xf taxdump.tar.gz"
 
@@ -223,12 +223,17 @@ rule mmseqs_uniprot_clusters:
 rule mmseqs_uniprot_taxdb:
     input:
         vdb = os.path.join(PROTPATH, "uniprot_virus_c99.db"),
-        tax = os.path.join(TAXPATH, "nodes.dmp"),
-        idm = os.path.join(TAXPATH, "uniprot_ncbi_mapping.dat")
+        idm = os.path.join(TAXPATH, "uniprot_ncbi_mapping.dat"),
+        nms = os.path.join(TAXPATH, "names.dmp"),
+        nds = os.path.join(TAXPATH, "nodes.dmp"),
+        mgd = os.path.join(TAXPATH, "merged.dmp"),
+        dln = os.path.join(TAXPATH, "delnodes.dmp"),
     params:
         tax = TAXPATH
     output:
-        multiext(os.path.join(PROTPATH, "uniprot_virus_c99"), ".db_mapping", ".db_names.dmp", ".db_nodes.dmp", ".db_merged.dmp", ".db_delnodes.dmp")
+        multiext(os.path.join(PROTPATH, "uniprot_virus_c99"), 
+                 ".db_mapping", ".db_names.dmp", ".db_nodes.dmp", 
+                 ".db_merged.dmp", ".db_delnodes.dmp")
     shell:
         """
         mmseqs createtaxdb --ncbi-tax-dump {params.tax} --tax-mapping-file {input.idm} {input.vdb} $(mktemp -d -p {TMPDIR})
@@ -256,8 +261,11 @@ rule mmseqs_urv:
 rule mmseqs_urv_taxonomy:
     input:
         vdb = os.path.join(URVPATH, "uniref50_virus.db"),
-        tax = os.path.join(TAXPATH, "nodes.dmp"),
-        idm = os.path.join(TAXPATH, "uniprot_ncbi_mapping.dat")
+        idm = os.path.join(TAXPATH, "uniprot_ncbi_mapping.dat"),
+        nms = os.path.join(TAXPATH, "names.dmp"),
+        nds = os.path.join(TAXPATH, "nodes.dmp"),
+        mgd = os.path.join(TAXPATH, "merged.dmp"),
+        dln = os.path.join(TAXPATH, "delnodes.dmp"),
     params:
         tax = TAXPATH
     output:
